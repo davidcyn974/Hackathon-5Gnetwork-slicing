@@ -35,10 +35,19 @@ def round_robin_scheduler(network_config: NetworkConfiguration) -> List[Packet]:
             if queue:
                 packet = queue.pop(0)
                 if packet.arrival_time <= current_time:
-                    transmission_time = packet.size / (network_config.port_bandwidth * 1e9 / 8)  # Convert Gbps to bytes/s
+                    # Calculate minimum transmission time based on port bandwidth
+                    min_transmission_time = (packet.size * 1e9) / (network_config.port_bandwidth * 1e9)  # Convert to ns
+                    
+                    # Ensure current_time is an integer
+                    current_time = max(int(current_time), packet.arrival_time)
+                    
+                    # Set scheduled_time and calculate departure_time
                     packet.scheduled_time = current_time
-                    packet.departure_time = current_time + transmission_time
-                    current_time += transmission_time
+                    packet.departure_time = current_time + int(min_transmission_time)
+                    
+                    # Update current_time for next packet
+                    current_time = packet.departure_time
+                    
                     scheduled_packets.append(packet)
                 else:
                     queue.insert(0, packet)
@@ -63,29 +72,29 @@ def parse_input()->NetworkConfiguration:
         port_bandwidth (int): Port Bandwidth in Gbps
         slices (list): List of dictionaries, each representing a slice
     """
-    lines = sys.stdin.read().strip().split('\n')
+    lines = [line.strip() for line in sys.stdin if line.strip()]
     
-    # Parse first line
-    num_slices, port_bandwidth = map(int, lines[0].split())
+    num_slices, port_bandwidth = map(float, lines[0].split())
+    num_slices = int(num_slices)
     
     slices = []
-    for i in range(1, len(lines), 2):
-        # Parse slice information
-        num_packets, slice_bandwidth, max_delay = map(int, lines[i].split())
+    i = 1
+    while i < len(lines):
+        slice_info = list(map(float, lines[i].split()))
+        num_packets, slice_bandwidth, max_delay = slice_info
+        num_packets = int(num_packets)
         
-        # Parse packet information
-        packet_info = list(map(int, lines[i+1].split()))
+        i += 1
+        packet_info = list(map(float, lines[i].split()))
+        
         packets = [
-            Packet(arrival_time=packet_info[j], size=packet_info[j+1], slice_id=i-1//2, packet_id=j//2)
+            Packet(arrival_time=int(packet_info[j]), size=int(packet_info[j+1]), slice_id=len(slices), packet_id=j//2)
             for j in range(0, len(packet_info), 2)
         ]
-        
-        slices.append(Slice(num_packets=num_packets, bandwidth=slice_bandwidth, max_delay=max_delay, packets=packets))
-        
-    return NetworkConfiguration(num_slices=num_slices, port_bandwidth=port_bandwidth, slices=slices)
+        slices.append(Slice(num_packets=num_packets, bandwidth=slice_bandwidth, max_delay=int(max_delay), packets=packets))
+        i += 1
     
-
-
+    return NetworkConfiguration(num_slices=num_slices, port_bandwidth=port_bandwidth, slices=slices)
 input_str = """2 2
 3 1 30000
 0 8000 1000 16000 3000 8000
@@ -94,9 +103,13 @@ input_str = """2 2
 
 
 def main():
-    network_config = parse_input()
-    scheduled_packets = round_robin_scheduler(network_config)
-    print_output(scheduled_packets)
+    try:
+        network_config = parse_input()
+        scheduled_packets = round_robin_scheduler(network_config)
+        print_output(scheduled_packets)
+    except Exception as e:
+        print(f"An error occurred: {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
